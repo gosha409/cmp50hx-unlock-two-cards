@@ -1,0 +1,26 @@
+#!/bin/sh
+exec tail -n +3 "$0"
+
+menuentry 'CMP 50HX AUTO - BOTH GPUs' --id cmp50-auto {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    insmod search_fs_file
+
+    search --no-floppy --file --set=esp /EFI/50HX-AUTO0/50HXUNLK.EFI
+
+    if [ -f ($esp)/EFI/50HX-AUTO0/50HXUNLK.EFI ]; then
+        echo 'Unlock CMP ordinal 0...'
+        chainloader ($esp)/EFI/50HX-AUTO0/50HXUNLK.EFI --return-to-grub
+        boot
+    fi
+
+    if [ -f ($esp)/EFI/50HX-AUTO1/50HXUNLK.EFI ]; then
+        echo 'Unlock CMP ordinal 1...'
+        chainloader ($esp)/EFI/50HX-AUTO1/50HXUNLK.EFI --return-to-grub
+        boot
+    fi
+
+    echo 'Returning to Kali GRUB menu...'
+    configfile $prefix/grub.cfg
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Arm dual CMP 50HX EFI unlock for next GRUB boot
+After=local-fs.target
+ConditionPathExists=/boot/grub/grubenv
+ConditionPathExists=/boot/efi/EFI/50HX-AUTO0/50HXUNLK.EFI
+ConditionPathExists=/boot/efi/EFI/50HX-AUTO1/50HXUNLK.EFI
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/grub-reboot cmp50-auto
+
+[Install]
+WantedBy=multi-user.target
