@@ -1,6 +1,6 @@
 # Разблокировка двух NVIDIA CMP 50HX (20 GB) через UEFI + GRUB
 
-**[English README](README.en.md)** · **[Результаты тестов](docs/RESULTS.md)** · **[Диагностика](docs/TROUBLESHOOTING.md)** · **[Авторство и лицензии](docs/ATTRIBUTION.md)**
+**[English README](README.md)** · **[Результаты тестов](docs/RESULTS.md)** · **[Диагностика](docs/TROUBLESHOOTING.md)** · **[Авторство и лицензии](docs/ATTRIBUTION.md)**
 
 Практическая инструкция с командами для **двух NVIDIA CMP 50HX**: сборка двух независимых UEFI-разблокировщиков, их последовательный запуск из GRUB, тестирование и настройка автозапуска. **Штатный драйвер NVIDIA и VBIOS не изменяются.**
 
@@ -77,16 +77,23 @@ apt install -y git build-essential gnu-efi binutils python3 file \
 
 cd /root
 
-# Замените YOUR_GITHUB_USERNAME своим GitHub-логином
-# Если пакет скачан ZIP-архивом, вместо git clone распакуйте его в эту папку.
-git clone https://github.com/YOUR_GITHUB_USERNAME/cmp50hx-dual-gpu-unlock.git
+# Репозиторий уже опубликован; имя каталога задано явно.
+# Если пакет скачан ZIP-архивом, распакуйте его содержимое в эту папку.
+if [ ! -e /root/cmp50hx-dual-gpu-unlock ]; then
+  git clone https://github.com/gosha409/cmp50hx-unlock-two-cards.git \
+    cmp50hx-dual-gpu-unlock
+fi
 
 # Оригинальный проект, содержащий исходники EFI
 # Если каталог уже существует, пропустите эту команду.
-git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+if [ ! -d /root/cmp50hx-unlock-src/.git ]; then
+  git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+fi
 
 # Зафиксируйте ревизию upstream для воспроизводимости
 git -C /root/cmp50hx-unlock-src rev-parse HEAD
+# Для воспроизводимости можно указать известный SHA upstream:
+# export EXPECTED_UPSTREAM_COMMIT=<проверенный_40_символьный_SHA>
 ```
 
 Если вы загрузили этот проект на сервер вручную, итоговый путь должен быть `/root/cmp50hx-dual-gpu-unlock`, а скрипт — `/root/cmp50hx-dual-gpu-unlock/scripts/build-dual.sh`. Если `git clone` сообщает, что каталог уже существует, не удаляйте его: переходите к следующему шагу.
@@ -94,6 +101,14 @@ git -C /root/cmp50hx-unlock-src rev-parse HEAD
 **Важно:** upstream может изменяться. Скрипт проверяет структуру исходника и останавливается при несовместимых изменениях; принудительно отключать проверки не нужно.
 
 ## 4. Собираем два EFI (ничего не устанавливаем)
+
+Сначала проверяем генератор исходников без запуска EFI и доступа к видеокартам:
+
+```bash
+cd /root/cmp50hx-dual-gpu-unlock
+python3 -m unittest discover -s tests -v
+```
+
 
 ```bash
 cd /root/cmp50hx-dual-gpu-unlock
@@ -199,7 +214,10 @@ reboot
 
 ```bash
 cd /root
-git clone https://github.com/krrishnarraj/clpeak.git
+if [ ! -d /root/clpeak/.git ]; then
+  git clone --recursive https://github.com/krrishnarraj/clpeak.git /root/clpeak
+fi
+git -C /root/clpeak submodule update --init --recursive
 cmake -S /root/clpeak -B /root/clpeak/build
 cmake --build /root/clpeak/build -j4
 ```

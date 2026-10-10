@@ -28,8 +28,20 @@ fi
 printf '\n%s\n' '=== SERVICE ==='
 systemctl is-enabled cmp50-auto-boot.service 2>/dev/null || true
 printf '\n%s\n' '=== BENCHMARK ==='
-if [[ -x /home/kali/clpeak/build/clpeak ]]; then
-  echo 'Manual FP32 benchmark: /home/kali/clpeak/build/clpeak --opencl --single-precision-compute'
+CLPEAK_BIN="${CLPEAK_BIN:-}"
+if [[ -z "$CLPEAK_BIN" ]]; then
+  for candidate in /root/clpeak/build/clpeak /home/kali/clpeak/build/clpeak; do
+    if [[ -x "$candidate" ]]; then
+      CLPEAK_BIN="$candidate"
+      break
+    fi
+  done
+fi
+if [[ -z "$CLPEAK_BIN" ]] && command -v clpeak >/dev/null 2>&1; then
+  CLPEAK_BIN="$(command -v clpeak)"
+fi
+if [[ -n "$CLPEAK_BIN" && -x "$CLPEAK_BIN" ]]; then
+  printf 'FP32 check: %q --opencl --single-precision-compute\n' "$CLPEAK_BIN"
 else
-  echo 'clpeak not found at default path; run your local build manually.'
+  echo 'clpeak not found; set CLPEAK_BIN to its absolute executable path.'
 fi

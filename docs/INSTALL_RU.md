@@ -23,9 +23,13 @@ findmnt /boot/efi
 Если ранее уже был установлен работающий EFI, сохраните **его же** отдельно до каких-либо изменений:
 
 ```bash
-cp -a /boot/efi/EFI/50HX/50HXUNLK.EFI \
-  /root/cmp50hx-backup/50HXUNLK.original.EFI
-sha256sum /root/cmp50hx-backup/50HXUNLK.original.EFI
+if [ -f /boot/efi/EFI/50HX/50HXUNLK.EFI ]; then
+  cp -a /boot/efi/EFI/50HX/50HXUNLK.EFI \
+    /root/cmp50hx-backup/50HXUNLK.original.EFI
+  sha256sum /root/cmp50hx-backup/50HXUNLK.original.EFI
+else
+  echo "No existing EFI unlocker to back up"
+fi
 ```
 
 В тестовой системе hash исходного рабочего EFI начинался с `4d42434b...`, однако он не является универсальным эталоном: сравнивайте с **собственной** сохранённой копией.
@@ -34,9 +38,14 @@ sha256sum /root/cmp50hx-backup/50HXUNLK.original.EFI
 
 ```bash
 sudo apt update
-sudo apt install -y git build-essential gnu-efi binutils python3 file
+sudo apt install -y git build-essential gnu-efi binutils python3 file cmake clinfo ocl-icd-opencl-dev
 cd /root
-git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+if [ ! -e /root/cmp50hx-dual-gpu-unlock ]; then
+  git clone https://github.com/gosha409/cmp50hx-unlock-two-cards.git /root/cmp50hx-dual-gpu-unlock
+fi
+if [ ! -d /root/cmp50hx-unlock-src/.git ]; then
+  git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+fi
 ```
 
 В тестовой системе код проекта был клонирован 10.10.2026; точный commit hash в журнале сессии не сохранён. Для воспроизводимости публикации фиксируйте:
@@ -49,10 +58,12 @@ git -C /root/cmp50hx-unlock-src rev-parse HEAD
 
 ## 3. Собираем два независимых EFI
 
-Из каталога **этого** репозитория:
+Команды из каталога **этого** репозитория (после `cd /root/cmp50hx-dual-gpu-unlock`):
 
 ```bash
-sudo bash scripts/build-dual.sh \
+cd /root/cmp50hx-dual-gpu-unlock
+python3 -m unittest discover -s tests -v
+bash scripts/build-dual.sh \
   /root/cmp50hx-unlock-src/efi-unlock \
   ./dist
 ```
@@ -137,11 +148,19 @@ sudo reboot
 
 В GRUB вручную выберите `CMP 50HX AUTO - BOTH GPUs`. Дождитесь возврата в меню, затем выберите **обычную Kali**. Не выбирайте экспериментальный пункт второй раз.
 
-После старта:
+После старта (если `clpeak` ещё нет):
 
 ```bash
+cd /root
+if [ ! -d /root/clpeak/.git ]; then
+  git clone --recursive https://github.com/krrishnarraj/clpeak.git /root/clpeak
+fi
+git -C /root/clpeak submodule update --init --recursive
+cmake -S /root/clpeak -B /root/clpeak/build
+cmake --build /root/clpeak/build -j4
+
 nvidia-smi -L
-/home/kali/clpeak/build/clpeak --opencl --single-precision-compute
+/root/clpeak/build/clpeak --opencl --single-precision-compute
 ```
 
 Ориентир по результатам нашего теста: по **13.5 TFLOPS FP32** на обоих CMP. Убедитесь, что в `dmesg` нет новых `NVRM: Xid`:

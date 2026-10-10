@@ -12,6 +12,7 @@ DIST="${2:-$ROOT/dist}"
 command -v python3 >/dev/null
 command -v file >/dev/null
 command -v objdump >/dev/null
+command -v sha256sum >/dev/null
 
 mkdir -p "$DIST"
 DIST="$(cd "$DIST" && pwd)"
@@ -20,13 +21,22 @@ trap 'rm -rf -- "$TMP"' EXIT
 cp -a "$UPSTREAM" "$TMP/efi-unlock"
 WORK="$TMP/efi-unlock"
 
-# Prefer the backup the author originally made of the pristine upstream file.
-if [[ -f "$UPSTREAM/unlock50x_v1.c.orig" ]]; then
+# Prefer the committed upstream source; fall back to a saved pristine copy only without Git.
+TOP="$(git -C "$UPSTREAM" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -n "$TOP" ]]; then
+  COMMIT="$(git -C "$TOP" rev-parse HEAD)"
+  # Lock to an explicitly supplied revision when reproducing a known build.
+  if [[ -n "${EXPECTED_UPSTREAM_COMMIT:-}" && "$COMMIT" != "$EXPECTED_UPSTREAM_COMMIT" ]]; then
+    echo "Upstream HEAD $COMMIT != EXPECTED_UPSTREAM_COMMIT $EXPECTED_UPSTREAM_COMMIT" >&2
+    exit 1
+  fi
+  git -C "$TOP" show "$COMMIT:efi-unlock/unlock50x_v1.c" > "$TMP/pristine.c"
+elif [[ -f "$UPSTREAM/unlock50x_v1.c.orig" ]]; then
+  echo "WARNING: no upstream Git history: using locally saved .orig source" >&2
   cp "$UPSTREAM/unlock50x_v1.c.orig" "$TMP/pristine.c"
 else
-  TOP="$(git -C "$UPSTREAM" rev-parse --show-toplevel 2>/dev/null || true)"
-  [[ -n "$TOP" ]] || { echo "Missing clean original and git history" >&2; exit 1; }
-  git -C "$TOP" show HEAD:efi-unlock/unlock50x_v1.c > "$TMP/pristine.c"
+  echo "Missing clean original and upstream Git history" >&2
+  exit 1
 fi
 
 python3 "$ROOT/scripts/patch_ordinals.py" \
@@ -37,14 +47,26 @@ python3 "$ROOT/scripts/patch_ordinals.py" \
 if grep -q -- '--target=efi-app-x86_64' "$WORK/build.sh"; then
   sed -i 's/--target=efi-app-x86_64/--output-target=efi-app-x86_64/g' "$WORK/build.sh"
 fi
-EFI_LIB="${EFI_LIB:-/usr/lib/x86_64-linux-gnu}"
+EFI_LIB="${EFI_LIB:-}"
+if [[ -z "$EFI_LIB" ]]; then
+  if [[ -s /usr/lib/x86_64-linux-gnu/elf_x86_64_efi.lds ]]; then
+    EFI_LIB=/usr/lib/x86_64-linux-gnu
+  elif [[ -s /usr/lib/elf_x86_64_efi.lds ]]; then
+    EFI_LIB=/usr/lib
+  else
+    echo "GNU-EFI linker script missing. Install gnu-efi or set EFI_LIB." >&2
+    exit 1
+  fi
+fi
 [[ -s "$EFI_LIB/elf_x86_64_efi.lds" ]] || {
   echo "Missing linker script at $EFI_LIB. Install gnu-efi or set EFI_LIB." >&2
   exit 1
 }
 
-if git -C "$UPSTREAM" rev-parse HEAD >/dev/null 2>&1; then
-  git -C "$UPSTREAM" rev-parse HEAD > "$DIST/upstream-commit.txt"
+if [[ -n "$TOP" ]]; then
+  printf '%s\n' "$COMMIT" > "$DIST/upstream-commit.txt"
+else
+  printf '%s\n' 'UNAVAILABLE: local backup source' > "$DIST/upstream-commit.txt"
 fi
 for IDX in 0 1; do
   cp "$TMP/generated/unlock50x_auto${IDX}.c" "$WORK/unlock50x_v1.c"

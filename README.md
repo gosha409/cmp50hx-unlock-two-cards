@@ -1,6 +1,6 @@
 # Dual NVIDIA CMP 50HX (20 GB) UEFI compute unlock — step-by-step guide
 
-**[Русская инструкция](README.md)** · **[Benchmark results](docs/RESULTS.md)** · **[Troubleshooting](docs/TROUBLESHOOTING.md)** · **[Credits and licensing](docs/ATTRIBUTION.md)**
+**[Русская инструкция](README%281%29.md)** · **[Benchmark results](docs/RESULTS.md)** · **[Troubleshooting](docs/TROUBLESHOOTING.md)** · **[Credits and licensing](docs/ATTRIBUTION.md)**
 
 This guide shows the **exact commands** to build two independent UEFI unlock applications, run them sequentially from GRUB, validate both GPUs with OpenCL `clpeak`, and enable automatic unlocking before Linux starts. **No NVIDIA driver patch or VBIOS flashing is required for this compute-unlock workflow.**
 
@@ -76,15 +76,22 @@ apt install -y git build-essential gnu-efi binutils python3 file \
 
 cd /root
 
-# Replace YOUR_GITHUB_USERNAME with the owner of your published repository.
-# If using a downloaded ZIP, extract it to /root/cmp50hx-dual-gpu-unlock instead.
-git clone https://github.com/YOUR_GITHUB_USERNAME/cmp50hx-dual-gpu-unlock.git
+# Clone the published repository into the working path used below.
+# If using a downloaded ZIP, extract its contents to /root/cmp50hx-dual-gpu-unlock.
+if [ ! -e /root/cmp50hx-dual-gpu-unlock ]; then
+  git clone https://github.com/gosha409/cmp50hx-unlock-two-cards.git \
+    cmp50hx-dual-gpu-unlock
+fi
 
 # Original UEFI unlock project (skip clone if it already exists)
-git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+if [ ! -d /root/cmp50hx-unlock-src/.git ]; then
+  git clone https://github.com/xrip/cmp50hx-unlock.git cmp50hx-unlock-src
+fi
 
 # Record exact upstream revision for reproducibility
 git -C /root/cmp50hx-unlock-src rev-parse HEAD
+# Optional reproducible build gate (replace with SHA from a verified host):
+# export EXPECTED_UPSTREAM_COMMIT=<verified-40-character-SHA>
 ```
 
 Expected paths:
@@ -94,9 +101,17 @@ Expected paths:
 /root/cmp50hx-unlock-src/efi-unlock/unlock50x_v1.c
 ```
 
-The upstream project can change. The patcher intentionally fails if expected source anchors are missing; investigate upstream differences instead of bypassing these checks.
+The upstream project can change. **The precise upstream commit used on the tested machine was not recorded.** Save the commit SHA and use the same revision when reproducing results. The patcher rejects changes to its expected anchor positions but cannot guarantee compatibility with every future upstream revision. Do not disable these checks.
 
 ## 4. Build both EFI applications (build-only)
+
+Run local source-transformation tests first (does not touch the GPU):
+
+```bash
+cd /root/cmp50hx-dual-gpu-unlock
+python3 -m unittest discover -s tests -v
+```
+
 
 ```bash
 cd /root/cmp50hx-dual-gpu-unlock
@@ -201,7 +216,10 @@ If `clpeak` is not already installed, build it:
 
 ```bash
 cd /root
-git clone https://github.com/krrishnarraj/clpeak.git
+if [ ! -d /root/clpeak/.git ]; then
+  git clone --recursive https://github.com/krrishnarraj/clpeak.git /root/clpeak
+fi
+git -C /root/clpeak submodule update --init --recursive
 cmake -S /root/clpeak -B /root/clpeak/build
 cmake --build /root/clpeak/build -j4
 ```
